@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap');
+
+    body {
+        margin: 0;
+        font-family: "Roboto", sans-serif;
+        font-weight: 400;
+        font-style: normal;
+        color: #fff;
+    }
+
+    #root {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        width: 100vw;
+        background-color: #23272f;
+    }
+
+    h1 {
+        font-size: 3em;
+    }
+
+    p {
+        margin: 2vmin;
+        
+    }
+
+    #files {
+        margin: 3vmin;
+        padding: 11vmin;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: #bebebe 0.2vmin dashed;
+        border-radius: 2vmin;
+        transition: all 0.3s ease;
+        white-space: pre;
+        text-align: center;
+        line-height: 3vmin;
+    }
+
+    #files:hover {
+        border-color: white;
+    }
+
+    button {
+        background-color: #626262;
+        border-radius: 10vmin;
+        border: 1px solid #232323;
+        display: inline-block;
+        cursor: pointer;
+        font-family: Arial;
+        font-size: 17px;
+        padding: 2.5vmin 5vmin;
+        text-decoration: none;
+        font-size: 1.5em;
+        transition: all 0.3s ease;
+    }
+
+    button:hover {
+        background-color: #d4d4d4;
+    }
+</style>
+
+<script>
+    let files = [];
+
+    function setInfo() {
+        let info = 'Current Files:\n';
+        files.forEach(file => {
+            info += `${file.f.name.split(".")[0]}: ${file.status}` + '\n';
+        });
+        document.getElementById('files').innerHTML = info;
+    }
+
+    function droppedFiles(event) {
+        event.preventDefault();
+        files = [...event.dataTransfer.items]
+            .filter(file => file.kind === "file")
+            .map(file => { return { f: file.getAsFile(), status: "Loaded" } });
+
+        setInfo();
+    }
+
+    function fixReplay() {
+        files.forEach(async (file, index) => {
+            let data = await file.f.text();
+            let jsondata = JSON.parse(data);
+
+            if (jsondata.gamemode === undefined) {
+                files[index].status = "Old Replay";
+                setInfo();
+                return;
+            }
+
+            if (jsondata.gamemode === 'league') {
+                files[index].status = "Already Fixed";
+                setInfo();
+                return;
+            }
+
+            // fix files here
+            jsondata.gamemode = 'league'
+            const users = jsondata.users[0]
+            jsondata.users = users
+
+            downloadFile(JSON.stringify(jsondata), file.f.name);
+            files[index].status = "Done";
+
+            setInfo();
+        })
+    }
+
+    function downloadFile(data, filename) {
+        let el = document.createElement('a');
+        el.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(data));
+        el.setAttribute('download', filename);
+        document.body.appendChild(el);
+        el.click();
+        document.body.removeChild(el);
+    }
+
+</script>
+
+<body id="root">
+    <h1>Fix Custom And Private Game Replays</h1>
+    <p style="color: #898989;">Made by TitanPlayz</p>
+
+
+    <div id="files" ondrop="droppedFiles(event);" ondragover="event.preventDefault();">
+        <p>Drop Replays Here</p>
+    </div>
+    <button onclick="fixReplay(document.getElementById('files').files)">Fix Replay</button>
+    <p id="info"></p>
+</body>
+
+</html>
