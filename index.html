@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>Replay Fixer</title>
 </head>
 
 <style>
@@ -137,13 +137,12 @@
 <body id="root">
     <h1>Fix Custom And Private Game Replays</h1>
     <p style="color: #898989;">Made by TitanPlayz</p>
-
+    <p>Use /savereplay to save replays in custom and private games</p>
 
     <div id="files" ondrop="droppedFiles(event);" ondragover="event.preventDefault();">
         <p>Drop Replays Here</p>
     </div>
     <button onclick="fixReplay(document.getElementById('files').files)">Fix Replay</button>
-    <p id="info"></p>
 </body>
 
 </html>
