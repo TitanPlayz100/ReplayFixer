@@ -1,12 +1,14 @@
-import { readFileSync } from 'fs'
-const data = readFileSync('./snippets/oldReplay.ttrm', 'utf8');
-const newdata = readFileSync('./snippets/leagueReplay.ttrm', 'utf8');
+import { readFileSync, writeFileSync } from 'fs'
+const oldReplay = JSON.parse(readFileSync('./snippets/oldReplay.ttrm', 'utf8'));
+const newReplay = JSON.parse(readFileSync('./snippets/leagueReplay.ttrm', 'utf8'));
 
-const jsondata = JSON.parse(data);
-const newjsondata = JSON.parse(newdata);
+// explanation: data = list of rounds, replays = user infos, events = list of actions
+const eventlist = oldReplay.data[0].replays[0].events;
 
-const eventlist = jsondata.data[0].replays[0].events;
-const eventlistnew = newjsondata.replay.rounds[0][0].replay.events;
+// explanation: rounds = list of rounds, each round has list of user info, replay = replay info, events = list of actions
+const eventlistnew = newReplay.replay.rounds[0][0].replay.events;
 
-console.log(eventlist[eventlist.length - 1].data.export.game.board);
-console.log(eventlistnew[eventlistnew.length - 1].data.game.board);
+const board1 = eventlist[eventlist.length - 1].data.export.stats.clears;
+const board2 = eventlistnew[eventlistnew.length - 1].data.stats.clears;
+
+writeFileSync('./out.json', JSON.stringify([board1, board2], null, 2));
