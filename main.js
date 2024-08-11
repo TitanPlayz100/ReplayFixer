@@ -39,7 +39,7 @@ function manageReplays() {
         } else if (time < 1701302400000) {
             files[index].status = "Format too different";
         } else if (time < 1721952000000) {
-            fixCustomReplay(jsondata, file);
+            fixOldReplay(jsondata, file);
             files[index].status = "Fixed";
         } else {
             files[index].status = "Already Fixed";
@@ -52,8 +52,7 @@ function manageReplays() {
 function fixOldReplay(data, file) {
     const defaultStats = { apm: 0, pps: 0, vsscore: 0, garbagesent: 0, garbagereceived: 0, kills: 0, altitude: 0, rank: 0, targetingfactor: 0, targetinggrace: 0 };
 
-    const user1 = data.endcontext[0]
-    const user2 = data.endcontext[1]
+    const [user1, user2] = data.endcontext.toSorted((a, b) => b.naturalorder - a.naturalorder)
     const users = [
         {
             id: user1.id,
@@ -99,6 +98,11 @@ function fixOldReplay(data, file) {
 
     const rounds = data.data.map(round => {
         jfunc = ind => {
+            round.board = round.board.toSorted((a, b) => b.naturalorder - a.naturalorder);
+            if (round.replays[ind].events[0].data.options.username != round.board[ind].username) {
+                [round.replays[ind], round.replays[+!ind]] = [round.replays[+!ind], round.replays[ind]];
+            }
+
             let lastIndex = round.replays[ind].events.length - 1
             let lastEvent = round.replays[ind].events[lastIndex];
             while (lastEvent.type != 'end') {
@@ -106,33 +110,53 @@ function fixOldReplay(data, file) {
                 lastEvent = round.replays[ind].events[lastIndex];
             }
 
-            const changeGarbEvents = ev => {
+            const fixGameid = id => { return parseInt(id.slice(-4), 16) % 8192 }; // IDK WHAT THIS IS
+            const fixIGEEvents = ev => {
                 return (ev.type == "ige")
-                    ? {
-                        ...ev,
-                        data: {
-                            ...ev.data,
-                            type: ev.data.data.type,
-                            frame: ev.data.data.frame - 5,
+                    ? (ev.data.data.type != 'kev')
+                        ? {
+                            ...ev,
                             data: {
-                                ...ev.data.data.data,
-                                gameid: 1,
-                                frame: ev.data.data.frame,
-                                cid: ev.data.data.cid,
+                                ...ev.data,
+                                type: ev.data.data.type,
+                                frame: ev.data.data.frame, // IDK WHAT THIS IS
+                                data: {
+                                    ...ev.data.data.data,
+                                    gameid: fixGameid(ev.data.data.gameid),
+                                    frame: ev.data.data.frame,
+                                    cid: ev.data.data.cid,
+                                }
                             }
                         }
-                    }
-                    : ev
+                        : {
+                            ...ev,
+                            data: {
+                                ...ev.data,
+                                type: data.data.type,
+                                data: {
+                                    ...ev.data.data,
+                                    victim: {
+                                        gameid: fixGameid(ev.data.data.victim.gameid)
+                                    },
+                                    killer: {
+                                        gameid: fixGameid(ev.data.data.killer.gameid)
+                                    },
+                                    type: undefined,
+                                    frame: ev.data.frame // IDK WHAT THIS IS
+                                }
+                            }
+                        }
+                    : ev;
             }
 
             const startEvents = [
                 { frame: 0, type: "start", data: {} },
-                { frame: 0, type: "ige", data: { id: 0, frame: 0, type: "target", data: { targets: [1] } } },
+                { frame: 0, type: "ige", data: { id: 0, frame: 0, type: "target", data: { targets: [fixGameid(round.board[+!ind].id)] } } },
                 { frame: 0, type: "ige", data: { id: 1, frame: 0, type: "allow_targeting", data: { value: false } } },
-                { frame: 0, type: "ige", data: { id: 2, frame: 0, type: "target", data: { targets: [1] } } },
+                { frame: 0, type: "ige", data: { id: 2, frame: 0, type: "target", data: { targets: [fixGameid(round.board[+!ind].id)] } } },
                 { frame: 0, type: "ige", data: { id: 3, frame: 0, type: "allow_targeting", data: { value: false } } }
             ]
-            const midEvents = round.replays[ind].events.slice(4, lastIndex).map(changeGarbEvents);
+            const midEvents = round.replays[ind].events.slice(4, lastIndex).map(fixIGEEvents);
             const endEvents = [{ frame: lastEvent.frame, type: "end", data: {} }]
 
             const newEvents = startEvents.concat(midEvents).concat(endEvents);
@@ -143,7 +167,7 @@ function fixOldReplay(data, file) {
                 active: round.board[ind].active,
                 naturalorder: round.board[ind].naturalorder,
                 alive: true,
-                lifetime: null,
+                lifetime: lastEvent.frame * 1000 / 60,
                 shadows: [],
                 shadowedBy: [null, null],
                 stats: {
@@ -158,17 +182,28 @@ function fixOldReplay(data, file) {
                     options: {
                         ...lastEvent.data.export.options,
                         version: 19,
-                        gameid: 1,
+                        gameid: fixGameid(lastEvent.data.export.options.gameid),
                         garbageabsolutecap: 0,
                         garbagephase: 0,
-                        garbageattackcap: 0
+                        garbageattackcap: 0,
+                        presets: undefined,
+                        infinitemovement: undefined,
+                        objective: undefined,
+                        latencymode: lastEvent.data.export.options.latencypreference,
+                        latencypreference: undefined,
+                        constants_overrides: undefined,
+                        spinbonuses: "T-spins",
+                        b2bchaining: true,
+                        b2bcharging: false,
+                        ghostskin: undefined,
+                        presets: undefined
                     },
                     results: {
                         aggregatestats: lastEvent.data.export.aggregatestats,
                         stats: {
                             ...lastEvent.data.export.stats,
                             zenith: {},
-                            finaltime: null
+                            finaltime: lastEvent.frame * 1000 / 60
                         },
                         gameoverreason: lastEvent.data.reason
                     }
@@ -188,6 +223,7 @@ function fixOldReplay(data, file) {
     }
 
     downloadFile(JSON.stringify(replay), "fixed-" + file.f.name);
+    // TODO: calculate average stats
 }
 
 function downloadFile(data, filename) {

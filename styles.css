@@ -14,7 +14,7 @@
     margin: 3vmin;
     width: 30vw;
     height: 28vw;
-    overflow-y: scroll;
+    overflow-y: auto;
     background-color: transparent;
     border: var(--pico-contrast) 0.2vmin dashed;
     border-radius: 2vmin;
