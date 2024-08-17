@@ -6,7 +6,7 @@ let files = [];
 function droppedFiles(event) {
     event.preventDefault();
     files = [...event.dataTransfer.items]
-        .filter(file => file.kind === "file")
+        .filter(file => file.kind === "file") // ensure each item is a file
         .map(file => { return { f: file.getAsFile(), status: "Loaded" } });
 
     setInfo();
@@ -16,7 +16,7 @@ function manageReplays() {
     files.forEach(async (file, index) => {
         const ext = file.f.name.split(".")[1];
 
-        if (ext !== "ttrm") {
+        if (ext !== "ttrm") { // check file extension
             files[index].status = "Not A TTRM Replay";
             setInfo();
             return;
@@ -34,14 +34,14 @@ function manageReplays() {
         }
 
         const time = Date.parse(jsondata.ts)
-        if (time < 1632787200000) {
+        if (time < 1632787200000) { // before new graphics update
             files[index].status = "Way Too Old";
-        } else if (time < 1701302400000) {
+        } else if (time < 1701302400000) { // small differences in formats
             files[index].status = "Format too different";
         } else if (time < 1721952000000) {
             fixOldReplay(jsondata, file);
             files[index].status = "Fixed";
-        } else {
+        } else { // beta release or other
             files[index].status = "Already Fixed";
         }
 
@@ -50,9 +50,9 @@ function manageReplays() {
 }
 
 function fixOldReplay(data, file) {
-    const defaultStats = { apm: 0, pps: 0, vsscore: 0, garbagesent: 0, garbagereceived: 0, kills: 0, altitude: 0, rank: 0, targetingfactor: 0, targetinggrace: 0 };
+    const [user1, user2] = data.endcontext
+        .toSorted((a, b) => b.naturalorder - a.naturalorder); // sort by order
 
-    const [user1, user2] = data.endcontext.toSorted((a, b) => b.naturalorder - a.naturalorder)
     const users = [
         {
             id: user1.id,
@@ -72,6 +72,25 @@ function fixOldReplay(data, file) {
         }
     ]
 
+    function statsTotal(ind) { // AVERAGE OF STATS (includes 0s)
+        // accumilate stats through each round
+        let totals = data.data.reduce((total, round) => {
+            // sort by natural order
+            round.board = round.board.toSorted((a, b) => b.naturalorder - a.naturalorder);
+            if (round.replays[ind].events[0].data.options.username != round.board[ind].username) {
+                [round.replays[ind], round.replays[+!ind]] = [round.replays[+!ind], round.replays[ind]]; // swap if wrong order
+            }
+
+            const stats = round.replays[ind].events.filter(e => e.type == 'end')[0].data.export.aggregatestats; // get stats for round
+            return Object.fromEntries(Object.keys(total).map(val => [val, total[val] + stats[val]])); // add them to running total
+        }, { apm: 0, pps: 0, vsscore: 0 });
+
+        Object.keys(totals).forEach(key => {
+            totals[key] = totals[key] / data.data.length; // divide to get average
+        });
+        return totals;
+    }
+
     const leaderboard = [
         {
             id: user1.id,
@@ -79,8 +98,7 @@ function fixOldReplay(data, file) {
             active: user1.active,
             naturalorder: user1.naturalorder,
             wins: user1.wins,
-            // maybe calculate average stats
-            stats: defaultStats,
+            stats: statsTotal(0),
             shadows: [],
             shadowedBy: [null, null]
         },
@@ -90,28 +108,32 @@ function fixOldReplay(data, file) {
             active: user2.active,
             naturalorder: user2.naturalorder,
             wins: user2.wins,
-            stats: defaultStats,
+            stats: statsTotal(1),
             shadows: [],
             shadowedBy: [null, null]
         }
     ]
 
+    // fix each round
     const rounds = data.data.map(round => {
+        // one function for both players
         jfunc = ind => {
-            round.board = round.board.toSorted((a, b) => b.naturalorder - a.naturalorder);
+            round.board = round.board.toSorted((a, b) => b.naturalorder - a.naturalorder); // sort by natural order
             if (round.replays[ind].events[0].data.options.username != round.board[ind].username) {
-                [round.replays[ind], round.replays[+!ind]] = [round.replays[+!ind], round.replays[ind]];
+                [round.replays[ind], round.replays[+!ind]] = [round.replays[+!ind], round.replays[ind]]; // swap if wrong order
             }
 
             let lastIndex = round.replays[ind].events.length - 1
             let lastEvent = round.replays[ind].events[lastIndex];
+
+            // loop to find index of 'end' event
             while (lastEvent.type != 'end') {
                 lastIndex--;
                 lastEvent = round.replays[ind].events[lastIndex];
             }
 
             const fixGameid = id => { return parseInt(id.slice(-4), 16) % 8192 }; // IDK WHAT THIS IS
-            const fixIGEEvents = ev => {
+            const fixIGEEvents = ev => { // reformat garbage and kev events
                 return (ev.type == "ige")
                     ? (ev.data.data.type != 'kev')
                         ? {
@@ -149,25 +171,25 @@ function fixOldReplay(data, file) {
                     : ev;
             }
 
-            const startEvents = [
+            const startEvents = [ // default start events
                 { frame: 0, type: "start", data: {} },
                 { frame: 0, type: "ige", data: { id: 0, frame: 0, type: "target", data: { targets: [fixGameid(round.board[+!ind].id)] } } },
                 { frame: 0, type: "ige", data: { id: 1, frame: 0, type: "allow_targeting", data: { value: false } } },
                 { frame: 0, type: "ige", data: { id: 2, frame: 0, type: "target", data: { targets: [fixGameid(round.board[+!ind].id)] } } },
                 { frame: 0, type: "ige", data: { id: 3, frame: 0, type: "allow_targeting", data: { value: false } } }
             ]
-            const midEvents = round.replays[ind].events.slice(4, lastIndex).map(fixIGEEvents);
+            const midEvents = round.replays[ind].events.slice(4, lastIndex).map(fixIGEEvents); // original events, fixing garbage and kev
             const endEvents = [{ frame: lastEvent.frame, type: "end", data: {} }]
 
-            const newEvents = startEvents.concat(midEvents).concat(endEvents);
+            const newEvents = startEvents.concat(midEvents).concat(endEvents); // adding events together
 
-            return {
+            return { // reformatted round data
                 id: round.board[ind].id,
                 username: round.board[ind].username,
                 active: round.board[ind].active,
                 naturalorder: round.board[ind].naturalorder,
                 alive: true,
-                lifetime: lastEvent.frame * 1000 / 60,
+                lifetime: lastEvent.frame * 1000 / 60, // time in seconds using total frames
                 shadows: [],
                 shadowedBy: [null, null],
                 stats: {
@@ -181,22 +203,24 @@ function fixOldReplay(data, file) {
                     events: newEvents,
                     options: {
                         ...lastEvent.data.export.options,
-                        version: 19,
+                        version: 19, // i dont know what this actually does
                         gameid: fixGameid(lastEvent.data.export.options.gameid),
-                        garbageabsolutecap: 0,
+                        garbageabsolutecap: 0, // changing from boolean to int
                         garbagephase: 0,
                         garbageattackcap: 0,
-                        presets: undefined,
+                        presets: undefined, // removing unkonwn events using undefined
                         infinitemovement: undefined,
                         objective: undefined,
                         latencymode: lastEvent.data.export.options.latencypreference,
                         latencypreference: undefined,
                         constants_overrides: undefined,
-                        spinbonuses: "T-spins",
+                        ghostskin: undefined,
+                        presets: undefined,
+                        spinbonuses: "T-spins", // old ruleset
                         b2bchaining: true,
                         b2bcharging: false,
-                        ghostskin: undefined,
-                        presets: undefined
+                        // roundmode:"down", // testing what this does, can change to "down"
+                        openerphase: 0
                     },
                     results: {
                         aggregatestats: lastEvent.data.export.aggregatestats,
@@ -210,10 +234,10 @@ function fixOldReplay(data, file) {
                 }
             }
         }
-        return [jfunc(0), jfunc(1)]
+        return [jfunc(0), jfunc(1)] // return array of both players rounds
     })
 
-    const replay = {
+    const replay = { // reformatted replay data YAY
         id: null,
         gamemode: null,
         ts: data.ts,
@@ -223,10 +247,9 @@ function fixOldReplay(data, file) {
     }
 
     downloadFile(JSON.stringify(replay), "fixed-" + file.f.name);
-    // TODO: calculate average stats
 }
 
-function downloadFile(data, filename) {
+function downloadFile(data, filename) { // weird code to download files using js
     let el = document.createElement('a');
     el.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(data));
     el.setAttribute('download', filename);
