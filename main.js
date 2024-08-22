@@ -132,7 +132,7 @@ function fixOldReplay(data, file) {
                 lastEvent = round.replays[ind].events[lastIndex];
             }
 
-            const fixGameid = id => { return parseInt(id.slice(-4), 16) % 8192 }; // IDK WHAT THIS IS
+            const fixGameid = id => { return parseInt(id.slice(-4), 16) % 8192 }; // IDK WHAT THIS IS (the slice is added)
             const fixIGEEvents = ev => { // reformat garbage and kev events
                 return (ev.type == "ige")
                     ? (ev.data.data.type != 'kev')
@@ -164,7 +164,7 @@ function fixOldReplay(data, file) {
                                         gameid: fixGameid(ev.data.data.killer.gameid)
                                     },
                                     type: undefined,
-                                    frame: ev.data.frame // IDK WHAT THIS IS
+                                    frame: ev.data.frame - 10 // IDK WHAT THIS IS
                                 }
                             }
                         }
@@ -183,12 +183,14 @@ function fixOldReplay(data, file) {
 
             const newEvents = startEvents.concat(midEvents).concat(endEvents); // adding events together
 
+            const booltoint = val => { return val === true ? 1 : 0 }
+
             return { // reformatted round data
                 id: round.board[ind].id,
                 username: round.board[ind].username,
                 active: round.board[ind].active,
                 naturalorder: round.board[ind].naturalorder,
-                alive: true,
+                alive: round.board[ind].success,
                 lifetime: lastEvent.frame * 1000 / 60, // time in seconds using total frames
                 shadows: [],
                 shadowedBy: [null, null],
@@ -205,9 +207,9 @@ function fixOldReplay(data, file) {
                         ...lastEvent.data.export.options,
                         version: 19, // i dont know what this actually does
                         gameid: fixGameid(lastEvent.data.export.options.gameid),
-                        garbageabsolutecap: 0, // changing from boolean to int
-                        garbagephase: 0,
-                        garbageattackcap: 0,
+                        garbageabsolutecap: booltoint(lastEvent.data.export.options.garbageabsolutecap), // changing from boolean to int
+                        garbagephase: booltoint(lastEvent.data.export.options.garbagephase),
+                        garbageattackcap: booltoint(lastEvent.data.export.options.garbageattackcap),
                         presets: undefined, // removing unkonwn events using undefined
                         infinitemovement: undefined,
                         objective: undefined,
@@ -219,7 +221,7 @@ function fixOldReplay(data, file) {
                         spinbonuses: "T-spins", // old ruleset
                         b2bchaining: true,
                         b2bcharging: false,
-                        // roundmode:"down", // testing what this does, can change to "down"
+                        roundmode:"rng", // testing what this does, can change to "down" or "rng"
                         openerphase: 0
                     },
                     results: {
